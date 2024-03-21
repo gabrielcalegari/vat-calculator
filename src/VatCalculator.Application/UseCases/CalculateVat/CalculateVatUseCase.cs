@@ -36,7 +36,7 @@ public class CalculateVatUseCase : ICalculateVatUseCase
         return mapper.ToApplication(taxCalculatorResult);
     }
 
-    private (ITaxCalculationStrategy strategy, decimal amount) GetTaxCalculationStrategy(CalculateVatCommand command)
+    private static (ITaxCalculationStrategy strategy, decimal amount) GetTaxCalculationStrategy(CalculateVatCommand command)
     {
         if (command.GrossAmount.HasValue)
         {

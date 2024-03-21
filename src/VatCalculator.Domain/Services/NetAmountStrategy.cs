@@ -9,7 +9,7 @@ public sealed class NetAmountStrategy : ITaxCalculationStrategy
         var result = new TaxCalculationResult { VatRate = taxRate.VatRate, NetAmount = amount };
 
         result.VatAmount = taxRate.CalculateVatAmount(amount);
-        result.GrossAmount = result.NetAmount + result.VatAmount;
+        result.GrossAmount = taxRate.CalculateGrossAmount(amount);;
 
         return result;
     }
