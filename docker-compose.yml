@@ -1,0 +1,8 @@
+version: '3.4'
+
+services:
+  vatcalculator.webapi:
+    image: ${DOCKER_REGISTRY-}vatcalculatorwebapi
+    build:
+      context: .
+      dockerfile: src/VatCalculator.WebApi/Dockerfile
