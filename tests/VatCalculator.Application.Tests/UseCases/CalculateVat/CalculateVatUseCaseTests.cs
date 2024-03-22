@@ -2,9 +2,11 @@
 using FluentValidation;
 using FluentValidation.Results;
 using NSubstitute;
-using NSubstitute.ReceivedExtensions;
+using NSubstitute.ExceptionExtensions;
 using VatCalculator.Application.UseCases.CalculateVat;
 using VatCalculator.Application.UseCases.CalculateVat.Dtos;
+using VatCalculator.Domain.Models;
+using VatCalculator.Domain.Services;
 
 namespace VatCalculator.Application.Tests.UseCases.CalculateVat;
 
@@ -34,7 +36,9 @@ public class CalculateVatUseCaseTests
                 }
             });
 
-        var useCase = new CalculateVatUseCase(validator);
+        var strategyFactory = Substitute.For<ITaxCalculationStrategyFactory>();
+
+        var useCase = new CalculateVatUseCase(validator, strategyFactory);
 
         // Act
         var result = useCase.Execute(command);
@@ -45,7 +49,7 @@ public class CalculateVatUseCaseTests
     }
 
     [Fact]
-    public void Execute_WithUndefinedStrategy_InvalidOperationException()
+    public void Execute_WhenStrategyCanNotBeDefined_ExceptionThrown()
     {
         // Arrange
         var command = new CalculateVatCommand
@@ -54,100 +58,74 @@ public class CalculateVatUseCaseTests
         };
 
         var validator = Substitute.For<IValidator<CalculateVatCommand>>();
+
         validator
             .Validate(command)
             .Returns(new ValidationResult());
 
-        var useCase = new CalculateVatUseCase(validator);
+        var strategyFactory = Substitute
+            .For<ITaxCalculationStrategyFactory>();
+
+        strategyFactory
+            .CreateStrategyAndAmount(command)
+            .Throws<InvalidOperationException>();
+
+
+        var useCase = new CalculateVatUseCase(validator, strategyFactory);
 
         // Act
         var act = () => useCase.Execute(command);
 
         // Assert
-        act.Should().Throw<InvalidOperationException>().WithMessage("A strategy could not be found.");
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
-    public void Execute_WithGrossAmount_Success()
+    public void Execute_WithValidCommandAndStrategy_Success()
     {
         // Arrange
         var command = new CalculateVatCommand
         {
-            GrossAmount = 1000,
+            GrossAmount = 1100,
             VatRate = Domain.Models.AustrianVatRates.TenPercent
         };
 
+        const decimal expectedNetAmount = 1000;
+        const decimal expectedVatAmount = 100;
+
         var validator = Substitute.For<IValidator<CalculateVatCommand>>();
+
         validator
             .Validate(command)
             .Returns(new ValidationResult());
 
-        var useCase = new CalculateVatUseCase(validator);
+        var strategy = Substitute.For<ITaxCalculationStrategy>();
+
+        strategy.Calculate(Arg.Is<TaxRate>(r => r.VatRate == command.VatRate), command.GrossAmount.Value)
+            .Returns(new TaxCalculationResult
+            {
+                GrossAmount = command.GrossAmount.Value,
+                VatRate = command.VatRate,
+                NetAmount = 1000,
+                VatAmount = 100
+            });
+
+        var strategyFactory = Substitute.For<ITaxCalculationStrategyFactory>();
+
+        strategyFactory
+            .CreateStrategyAndAmount(command)
+            .Returns((strategy, command.GrossAmount.Value));
+
+        var useCase = new CalculateVatUseCase(validator, strategyFactory);
 
         // Act
         var result = useCase.Execute(command);
 
         // Assert
         result.IsError.Should().BeFalse();
-        result.Value.GrossAmount.Should().Be(1000M);
-        result.Value.NetAmount.Should().BeApproximately(909.09M, 0.001M);
-        result.Value.VatAmount.Should().BeApproximately(90.91M, 0.001M);
-        result.Value.VatRate.Should().Be(Domain.Models.AustrianVatRates.TenPercent);
-    }
-
-    [Fact]
-    public void Execute_WithNetAmount_Success()
-    {
-        // Arrange
-        var command = new CalculateVatCommand
-        {
-            NetAmount = 1000,
-            VatRate = Domain.Models.AustrianVatRates.TenPercent
-        };
-
-        var validator = Substitute.For<IValidator<CalculateVatCommand>>();
-        validator
-            .Validate(command)
-            .Returns(new ValidationResult());
-
-        var useCase = new CalculateVatUseCase(validator);
-
-        // Act
-        var result = useCase.Execute(command);
-
-        // Assert
-        result.IsError.Should().BeFalse();
-        result.Value.NetAmount.Should().Be(1000M);
-        result.Value.GrossAmount.Should().Be(1100M);
-        result.Value.VatAmount.Should().Be(100M);
-        result.Value.VatRate.Should().Be(Domain.Models.AustrianVatRates.TenPercent);
-    }
-
-    [Fact]
-    public void Execute_WithVatAmount_Success()
-    {
-        // Arrange
-        var command = new CalculateVatCommand
-        {
-            VatAmount = 100,
-            VatRate = Domain.Models.AustrianVatRates.TenPercent
-        };
-
-        var validator = Substitute.For<IValidator<CalculateVatCommand>>();
-        validator
-            .Validate(command)
-            .Returns(new ValidationResult());
-
-        var useCase = new CalculateVatUseCase(validator);
-
-        // Act
-        var result = useCase.Execute(command);
-
-        // Assert
-        result.IsError.Should().BeFalse();
-        result.Value.VatAmount.Should().Be(100M);
-        result.Value.GrossAmount.Should().Be(1100M);
-        result.Value.NetAmount.Should().Be(1000M);
-        result.Value.VatRate.Should().Be(Domain.Models.AustrianVatRates.TenPercent);
+        result.Value.GrossAmount.Should().Be(command.GrossAmount);
+        result.Value.NetAmount.Should().Be(expectedNetAmount);
+        result.Value.VatAmount.Should().Be(expectedVatAmount);
+        result.Value.VatRate.Should().Be(command.VatRate);
     }
 }

@@ -11,10 +11,12 @@ namespace VatCalculator.Application.UseCases.CalculateVat;
 public class CalculateVatUseCase : ICalculateVatUseCase
 {
     private readonly IValidator<CalculateVatCommand> validator;
+    private readonly ITaxCalculationStrategyFactory taxCalculationStrategyFactory;
 
-    public CalculateVatUseCase(IValidator<CalculateVatCommand> validator)
+    public CalculateVatUseCase(IValidator<CalculateVatCommand> validator, ITaxCalculationStrategyFactory taxCalculationStrategyFactory)
     {
         this.validator = validator;
+        this.taxCalculationStrategyFactory = taxCalculationStrategyFactory;
     }
 
     public ErrorOr<CalculateVatResult> Execute(CalculateVatCommand command)
@@ -25,7 +27,7 @@ public class CalculateVatUseCase : ICalculateVatUseCase
             return validationResult.Errors.ToErrorOr<CalculateVatResult>();
         }
 
-        (var taxCalculationStrategy, var amount) = GetTaxCalculationStrategy(command);
+        (var taxCalculationStrategy, var amount) = taxCalculationStrategyFactory.CreateStrategyAndAmount(command);
 
         var taxCalculator = new TaxCalculator(taxCalculationStrategy);
         var taxRate = new TaxRate(command.VatRate);
@@ -34,25 +36,5 @@ public class CalculateVatUseCase : ICalculateVatUseCase
 
         var mapper = new CalculateVatResultMapper();
         return mapper.ToApplication(taxCalculatorResult);
-    }
-
-    private static (ITaxCalculationStrategy strategy, decimal amount) GetTaxCalculationStrategy(CalculateVatCommand command)
-    {
-        if (command.GrossAmount.HasValue)
-        {
-            return (new GrossAmountStrategy(), command.GrossAmount.Value);
-        }
-
-        if (command.NetAmount.HasValue)
-        {
-            return (new NetAmountStrategy(), command.NetAmount.Value);
-        }
-
-        if (command.VatAmount.HasValue)
-        {
-            return (new VatAmountStrategy(), command.VatAmount.Value);
-        }
-
-        throw new InvalidOperationException("A strategy could not be found.");
     }
 }

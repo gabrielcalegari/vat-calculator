@@ -11,6 +11,7 @@ public static class DependencyInjection
         services = services ?? throw new ArgumentNullException(nameof(services));
 
         services.AddScoped<ICalculateVatUseCase, CalculateVatUseCase>();
+        services.AddScoped<ITaxCalculationStrategyFactory, TaxCalculationStrategyFactory>();
 
         services.AddValidatorsFromAssemblyContaining<IApplication>();
 
